@@ -61,14 +61,24 @@ defmodule ExBanking do
     case result do
       {:error, :user_does_not_exist} -> {:error, :sender_does_not_exist}
       {:error, :too_many_requests_to_user} -> {:error, :too_many_requests_to_sender}
-      _ -> _
+      rr -> rr
+    end
   end
 
-  defp call_user_server username, request do
+  def call_user_server username, request do
     userstore = get_store()
     case Agent.get(userstore, &( Map.get &1, username )) do
       nil -> {:error, :user_does_not_exist}
       user_worker -> GenServer.call(user_worker, request)
+    end
+  end
+
+  defp validate_amount amount do 
+    rounded_amount = Float.round(amount/1, 2)
+    if rounded_amount <= 0  or rounded_amount != amount do
+      {:error, :wrong_arguments}
+    else
+      rounded_amount
     end
   end
 
@@ -100,27 +110,23 @@ defmodule ExBanking do
       case GenServer.call(server, {:hold, amount, currency}) do
         {:error, descr} -> {:error, descr}
         {:ok, hold_uuid} ->
-          receiver_result = call_user_server(to_user, {:trans_deposit, [hold_uuid, amount, currency]})
-          clear_result = case receiver_result do
-            {:error, :user_does_not_exist} -> {:error, :receiver_does_not_exist}
-            {:error, :too_many_requests_to_user} -> {:error, :too_many_requests_to_receiver}
-            {:ok, _} ->
+          case ExBanking.call_user_server(to_user, {:trans_deposit, [hold_uuid, amount, currency]}) do
+            {:ok, to_user_balance} ->
               {:ok, from_user_balance} = GenServer.call(server, {:clear, hold_uuid})
-            _ -> _
-          end
-          case clear_result do
-            {:error, _} ->
+              {:ok, from_user_balance, to_user_balance}
+            {:error, err} -> 
               GenServer.call(server, {:unhold, hold_uuid})
-              clear_result
-            {:ok, _} ->
-              {:ok, to_user_balance} = receiver_result
-              {:ok, from_user_balance, receiver_result}
+              case err do
+                :user_does_not_exist -> {:error, :receiver_does_not_exist}
+                :too_many_requests_to_user -> {:error, :too_many_requests_to_receiver}
+                _ -> {:error, err}
+              end
           end
       end
     end
 
     def task_trans_deposit server, _user, hold_uuid, amount, currency do
-      GenServer.call(server, {:trans_increase, amount, currency})
+      GenServer.call(server, {:trans_increase, hold_uuid, amount, currency})
     end
 
     @impl true
@@ -129,14 +135,9 @@ defmodule ExBanking do
     end
 
     @impl true
-    def handle_call(:get, _from, user) do
-      {:reply, user, user}
-    end
-
-    @impl true
     def handle_call({:increase, amount, currency}, _from, user) do
       balance = user.balance
-      new_balance = Map.put(balance, currency, Map.get(balance, currency, 0.0) + amount) 
+      new_balance = Map.put(balance, currency, Float.round(Map.get(balance, currency, 0.0) + amount, 2)) 
       new_user = %{user | balance: new_balance}
       {:reply, {:ok, new_balance[currency]}, new_user}
     end
@@ -144,7 +145,7 @@ defmodule ExBanking do
     @impl true
     def handle_call({:trans_increase, hold_uuid, amount, currency}, _from, user) do
       balance = user.balance
-      new_balance = Map.put(balance, currency, Map.get(balance, currency, 0.0) + amount) 
+      new_balance = Map.put(balance, currency, Float.round(Map.get(balance, currency, 0.0) + amount, 2)) 
       new_user = %{user | balance: new_balance, trans_hist: [{hold_uuid, amount, currency} | user.trans_hist]}
       {:reply, {:ok, new_balance[currency]}, new_user}
     end
@@ -152,7 +153,7 @@ defmodule ExBanking do
     @impl true
     def handle_call({:decreace, amount, currency}, _from, user) do
       balance = user.balance
-      new_balance = Map.put(balance, currency, Map.get(balance, currency, 0.0) - amount) 
+      new_balance = Map.put(balance, currency, Float.round(Map.get(balance, currency, 0.0) - amount, 2)) 
       if new_balance[currency] < 0 do
         {:reply, {:error, :not_enough_money}, user}
       else
@@ -165,7 +166,7 @@ defmodule ExBanking do
     def handle_call({:hold, amount, currency}, _from, user) do
       hold_uuid = {DateTime.utc_now(), :rand.uniform}
       balance = user.balance
-      new_balance = Map.put(balance, currency, Map.get(balance, currency, 0.0) - amount) 
+      new_balance = Map.put(balance, currency, Float.round(Map.get(balance, currency, 0.0) - amount, 2)) 
       if new_balance[currency] < 0 do
         {:reply, {:error, :not_enough_money}, user}
       else
@@ -185,14 +186,14 @@ defmodule ExBanking do
     def handle_call({:unhold, hold_uuid}, _from, user) do
       {amount, currency} = user.holds[hold_uuid]
       balance = user.balance
-      new_balance = Map.put(balance, currency, Map.get(balance, currency, 0.0) + amount) 
+      new_balance = Map.put(balance, currency, Float.round(Map.get(balance, currency, 0.0) + amount, 2)) 
       new_user = %{user | balance: new_balance, holds: Map.delete(user.holds, hold_uuid)}
-      {:reply, {:ok, Map.get(user.balance, currency, 0.0)}, new_user}
+      {:reply, {:ok, Map.get(new_balance, currency, 0.0)}, new_user}
     end
 
     @impl true
-    def handle_call({operation, args}, from, user) when operation in [:get_name, :deposit, :withdraw, :get_balance, :send, :trans_deposit] do
-      if user.task_count > 10 do
+    def handle_call({operation, args}, from, user) when operation in [:deposit, :withdraw, :get_balance, :send, :trans_deposit] do
+      if user.task_count >= 10 do
         {:reply, {:error, :too_many_requests_to_user}, user}
       else
         server = self()
@@ -205,19 +206,22 @@ defmodule ExBanking do
       end
     end
 
+    @impl true
+    def handle_call(:get, _from, user) do
+      {:reply, user, user}
+    end
+
+    @impl true
+    def handle_call(:make_busy, _from, user) do
+      {:reply, :ok, %{user | task_count: user.task_count + 10}}
+    end
+
+    @impl true
+    def handle_call(:make_free, _from, user) do
+      {:reply, :ok, %{user | task_count: user.task_count - 10}}
+    end
+
   end  # UserWorker
-
-  def get_name user_name do
-    userstore = get_store()
-    user_worker = Agent.get(userstore, &( Map.get &1, user_name ))
-    GenServer.call(user_worker, {:get_name, []})
-  end
-
-  def get_user user do
-    userstore = get_store()
-    user_worker = Agent.get(userstore, &( Map.get &1, user ))
-    GenServer.call(user_worker, :get)
-  end
 
   defp new_user_worker user_name do
     user = %User{name: user_name}
@@ -235,13 +239,19 @@ defmodule ExBanking do
     end
   end
 
-  defp validate_amount amount do 
-    rounded_amount = Float.round(amount/1, 2)
-    if rounded_amount <= 0  or rounded_amount != amount do
-      {:error, :wrong_arguments}
-    else
-      rounded_amount
-    end
+  def get_user user do
+    user_worker = Agent.get(get_store(), &( Map.get &1, user ))
+    GenServer.call(user_worker, :get)
+  end
+
+  def make_busy user do
+    user_worker = Agent.get(get_store(), &( Map.get &1, user ))
+    GenServer.call(user_worker, :make_busy)
+  end
+
+  def make_free user do
+    user_worker = Agent.get(get_store(), &( Map.get &1, user ))
+    GenServer.call(user_worker, :make_free)
   end
 
 end

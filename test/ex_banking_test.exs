@@ -32,7 +32,10 @@ defmodule ExBankingTest do
     assert ExBanking.withdraw("withdraw_user", 5.5, "EUR") === {:error, :not_enough_money}
 
     ExBanking.make_busy("withdraw_user")
-    assert ExBanking.withdraw("withdraw_user", 1.0, "EUR") === {:error, :too_many_requests_to_user}
+
+    assert ExBanking.withdraw("withdraw_user", 1.0, "EUR") ===
+             {:error, :too_many_requests_to_user}
+
     ExBanking.make_free("withdraw_user")
     assert ExBanking.withdraw("withdraw_user", 1.0, "EUR") === {:ok, 3.5}
   end
@@ -56,16 +59,25 @@ defmodule ExBankingTest do
     assert ExBanking.deposit("from_user", 10.54, "EUR") == {:ok, 10.54}
     assert ExBanking.send("no_user", "to_user", 3.0, "EUR") === {:error, :sender_does_not_exist}
     assert ExBanking.send("from_user", "to_user", 12.0, "EUR") === {:error, :not_enough_money}
-    assert ExBanking.send("from_user", "no_user", 3.0, "EUR") === {:error, :receiver_does_not_exist}
+
+    assert ExBanking.send("from_user", "no_user", 3.0, "EUR") ===
+             {:error, :receiver_does_not_exist}
+
     assert ExBanking.send("from_user", "to_user", 3.0, "EUR") === {:ok, 7.54, 3.0}
     assert ExBanking.get_balance("from_user", "EUR") === {:ok, 7.54}
     assert ExBanking.get_balance("to_user", "EUR") === {:ok, 3.0}
 
     ExBanking.make_busy("from_user")
-    assert ExBanking.send("from_user", "to_user", 2.2, "EUR") === {:error, :too_many_requests_to_sender}
+
+    assert ExBanking.send("from_user", "to_user", 2.2, "EUR") ===
+             {:error, :too_many_requests_to_sender}
+
     ExBanking.make_free("from_user")
     ExBanking.make_busy("to_user")
-    assert ExBanking.send("from_user", "to_user", 2.2, "EUR") === {:error, :too_many_requests_to_receiver}
+
+    assert ExBanking.send("from_user", "to_user", 2.2, "EUR") ===
+             {:error, :too_many_requests_to_receiver}
+
     ExBanking.make_free("to_user")
     assert ExBanking.send("from_user", "to_user", 2.2, "EUR") === {:ok, 5.34, 5.2}
   end

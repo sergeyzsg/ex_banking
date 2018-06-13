@@ -2,6 +2,12 @@ defmodule ExBanking do
   @moduledoc """
   Documentation for ExBanking.
   """
+  use Application
+  alias ExBanking.UserRegistry, as: UserRegistry
+
+  def start(_type, _args) do
+    ExBanking.Supervisor.start_link(name: ExBanking.Supervisor)
+  end
 
   @type banking_error ::
           {:error,
@@ -17,16 +23,7 @@ defmodule ExBanking do
 
   @spec create_user(user :: String.t()) :: :ok | banking_error
   def create_user(user) do
-    userstore = get_store()
-
-    case Agent.get(userstore, &Map.get(&1, user)) do
-      nil ->
-        Agent.update(userstore, &Map.put_new_lazy(&1, user, fn -> create_user_server(user) end))
-        :ok
-
-      _ ->
-        {:error, :user_already_exists}
-    end
+    UserRegistry.create_user(user)
   end
 
   @spec deposit(user :: String.t(), amount :: number, currency :: String.t()) ::
@@ -74,11 +71,9 @@ defmodule ExBanking do
   end
 
   def call_user_server(username, request) do
-    userstore = get_store()
-
-    case Agent.get(userstore, &Map.get(&1, username)) do
-      nil -> {:error, :user_does_not_exist}
-      user_worker -> GenServer.call(user_worker, request)
+    case UserRegistry.get_user_worker(username) do
+      {:ok, pid} -> GenServer.call(pid, request)
+      error -> error
     end
   end
 
@@ -259,36 +254,24 @@ defmodule ExBanking do
 
   # UserWorker
 
-  defp create_user_server(user_name) do
+  def create_user_server(user_name) do
     user = %User{name: user_name}
     {:ok, worker} = GenServer.start_link(UserWorker, user)
     worker
   end
 
-  defp get_store do
-    case Process.whereis(:userstore) do
-      nil ->
-        {:ok, userstore} = Agent.start_link(fn -> %{} end)
-        Process.register(userstore, :userstore)
-        userstore
-
-      pid ->
-        pid
-    end
+  def get_user(username) do
+    {:ok, pid} = UserRegistry.get_user_worker(username)
+    GenServer.call(pid, :get)
   end
 
-  def get_user(user) do
-    user_worker = Agent.get(get_store(), &Map.get(&1, user))
-    GenServer.call(user_worker, :get)
+  def make_busy(username) do
+    {:ok, pid} = UserRegistry.get_user_worker(username)
+    GenServer.call(pid, :make_busy)
   end
 
-  def make_busy(user) do
-    user_worker = Agent.get(get_store(), &Map.get(&1, user))
-    GenServer.call(user_worker, :make_busy)
-  end
-
-  def make_free(user) do
-    user_worker = Agent.get(get_store(), &Map.get(&1, user))
-    GenServer.call(user_worker, :make_free)
+  def make_free(username) do
+    {:ok, pid} = UserRegistry.get_user_worker(username)
+    GenServer.call(pid, :make_free)
   end
 end

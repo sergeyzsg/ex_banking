@@ -76,6 +76,7 @@ defmodule ExBanking.Tasks do
     ExBanking.UserHolder.withdraw(user_holder, amount, currency)
   end
 
+  # TODO: restoration if send failed
   def send_worker(user_holder, to_user, amount, currency, registry) do
     case ExBanking.UserHolder.hold(user_holder, to_user, amount, currency) do
       {:error, descr} ->

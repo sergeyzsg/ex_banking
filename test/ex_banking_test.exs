@@ -4,7 +4,7 @@ defmodule ExBankingTest do
 
   setup context do
     start_supervised!({ExBanking.Supervisor, [registry: context.test]})
-    context
+    Map.put(context, :opts, registry: context.test)
   end
 
   test "create global user" do
@@ -14,9 +14,9 @@ defmodule ExBankingTest do
   end
 
   test "create local user", context do
-    assert ExBanking.create_user("local_user", registry: context.test) == :ok
-    assert ExBanking.create_user("local_user", registry: context.test) == {:error, :user_already_exists}
-    assert ExBanking.get_user("local_user", registry: context.test).name == "local_user"
+    assert ExBanking.create_user("local_user", context.opts) == :ok
+    assert ExBanking.create_user("local_user", context.opts) == {:error, :user_already_exists}
+    assert ExBanking.get_user("local_user", context.opts).name == "local_user"
     assert ExBanking.get_user("local_user") == {:error, :user_does_not_exist}
   end
 

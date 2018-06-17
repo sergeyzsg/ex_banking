@@ -73,6 +73,7 @@ defmodule ExBanking do
 
   def call_user_server(username, request, opts \\ []) do
     registry = Keyword.get(opts, :registry, ExBanking)
+
     case UserRegistry.get_user_worker(username, registry) do
       {:ok, pid} -> GenServer.call(pid, request)
       error -> error
@@ -264,6 +265,7 @@ defmodule ExBanking do
 
   def get_user(username, opts \\ []) do
     registry = Keyword.get(opts, :registry, ExBanking)
+
     case UserRegistry.get_user_worker(username, registry) do
       {:ok, pid} -> GenServer.call(pid, :get)
       error -> error

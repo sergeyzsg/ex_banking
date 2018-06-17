@@ -62,17 +62,12 @@ defmodule ExBanking do
           amount :: number,
           currency :: String.t()
         ) :: {:ok, from_user_balance :: number, to_user_balance :: number} | banking_error
-  def send(from_user, to_user, amount, currency) do
-    result =
-      case validate_amount(amount) do
-        {:error, descr} -> {:error, descr}
-        valid_amount -> call_user_server(from_user, {:send, [to_user, valid_amount, currency]})
-      end
+  def send(from_user, to_user, amount, currency, opts \\ []) do
+    registry = Keyword.get(opts, :registry, ExBanking)
 
-    case result do
-      {:error, :user_does_not_exist} -> {:error, :sender_does_not_exist}
-      {:error, :too_many_requests_to_user} -> {:error, :too_many_requests_to_sender}
-      rr -> rr
+    case validate_amount(amount) do
+      {:error, descr} -> {:error, descr}
+      valid_amount -> ExBanking.Tasks.send(from_user, to_user, amount, currency, registry)
     end
   end
 

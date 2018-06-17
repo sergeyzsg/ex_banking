@@ -79,18 +79,18 @@ defmodule ExBankingTest do
     assert ExBanking.get_balance("from_user", "EUR") === {:ok, 7.54}
     assert ExBanking.get_balance("to_user", "EUR") === {:ok, 3.0}
 
-    ExBanking.make_busy("from_user")
+    tasks = ExBanking.Tasks.make_busy("from_user", ExBanking)
 
     assert ExBanking.send("from_user", "to_user", 2.2, "EUR") ===
              {:error, :too_many_requests_to_sender}
 
-    ExBanking.make_free("from_user")
-    ExBanking.make_busy("to_user")
+    ExBanking.Tasks.make_free("from_user", ExBanking, tasks)
+    tasks = ExBanking.Tasks.make_busy("to_user", ExBanking)
 
     assert ExBanking.send("from_user", "to_user", 2.2, "EUR") ===
              {:error, :too_many_requests_to_receiver}
 
-    ExBanking.make_free("to_user")
+    ExBanking.Tasks.make_free("to_user", ExBanking, tasks)
     assert ExBanking.send("from_user", "to_user", 2.2, "EUR") === {:ok, 5.34, 5.2}
   end
 

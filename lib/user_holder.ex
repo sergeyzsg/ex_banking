@@ -22,39 +22,24 @@ defmodule ExBanking.UserHolder do
     GenServer.call(user_holder, {:decreace, amount, currency})
   end
 
-  def task_send(server, _user, to_user, amount, currency) do
-    case GenServer.call(server, {:hold, amount, currency}) do
-      {:error, descr} ->
-        {:error, descr}
+  def trans_deposit(user_holder, hold_uuid, amount, currency) do
+    GenServer.call(user_holder, {:trans_increase, hold_uuid, amount, currency})
+  end
 
-      {:ok, hold_uuid} ->
-        case ExBanking.call_user_server(
-               to_user,
-               {:trans_deposit, [hold_uuid, amount, currency]}
-             ) do
-          {:ok, to_user_balance} ->
-            {:ok, from_user_balance} = GenServer.call(server, {:clear, hold_uuid})
-            {:ok, from_user_balance, to_user_balance}
+  def hold(user_holder, to_user, amount, currency) do
+    GenServer.call(user_holder, {:hold, to_user, amount, currency})
+  end
 
-          {:error, err} ->
-            GenServer.call(server, {:unhold, hold_uuid})
+  def unhold(user_holder, hold_uuid) do
+    GenServer.call(user_holder, {:unhold, hold_uuid})
+  end
 
-            case err do
-              :user_does_not_exist -> {:error, :receiver_does_not_exist}
-              :too_many_requests_to_user -> {:error, :too_many_requests_to_receiver}
-              _ -> {:error, err}
-            end
-        end
-    end
+  def clear(user_holder, hold_uuid) do
+    GenServer.call(user_holder, {:clear, hold_uuid})
   end
 
   def task_trans_deposit(server, _user, hold_uuid, amount, currency) do
     GenServer.call(server, {:trans_increase, hold_uuid, amount, currency})
-  end
-
-  @impl true
-  def handle_cast(:done, user) do
-    {:noreply, %{user | task_count: user.task_count - 1}}
   end
 
   @impl true
@@ -97,13 +82,13 @@ defmodule ExBanking.UserHolder do
     {:reply, {:ok, new_balance[currency]}, new_user}
   end
 
-  defp handle_call_real({:hold, amount, currency}, _from, user) do
+  defp handle_call_real({:hold, to_user_name, amount, currency}, _from, user) do
     new_balance = decrease_balance(user.balance, amount, currency)
 
     if new_balance[currency] < 0 do
       {:reply, {:error, :not_enough_money}, user}
     else
-      hold_uuid = {DateTime.utc_now(), :rand.uniform()}
+      hold_uuid = {to_user_name, DateTime.utc_now(), :rand.uniform()}
 
       new_user = %{
         user
@@ -126,23 +111,6 @@ defmodule ExBanking.UserHolder do
     new_balance = increase_balance(user.balance, amount, currency)
     new_user = %{user | balance: new_balance, holds: Map.delete(user.holds, hold_uuid)}
     {:reply, {:ok, Map.get(new_balance, currency, 0.0)}, new_user}
-  end
-
-  defp handle_call_real({operation, args}, from, user)
-       when operation in [:send, :trans_deposit] do
-    if user.task_count >= 10 do
-      {:reply, {:error, :too_many_requests_to_user}, user}
-    else
-      server = self()
-
-      Task.start_link(fn ->
-        result = apply(__MODULE__, String.to_atom("task_#{operation}"), [server, user] ++ args)
-        GenServer.reply(from, result)
-        GenServer.cast(server, :done)
-      end)
-
-      {:noreply, %{user | task_count: user.task_count + 1}}
-    end
   end
 
   defp handle_call_real(:get, _from, user) do

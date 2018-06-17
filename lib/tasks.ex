@@ -29,6 +29,41 @@ defmodule ExBanking.Tasks do
     end
   end
 
+  def send(user, to_user, amount, currency, registry) do
+    result =
+      case ExBanking.UserRegistry.get_processes(user, registry) do
+        {:ok, {user_holder, task_supervisor}} ->
+          run_task(
+            :send_worker,
+            [user_holder, to_user, amount, currency, registry],
+            task_supervisor
+          )
+
+        error ->
+          error
+      end
+
+    case result do
+      {:error, :user_does_not_exist} -> {:error, :sender_does_not_exist}
+      {:error, :too_many_requests_to_user} -> {:error, :too_many_requests_to_sender}
+      error -> error
+    end
+  end
+
+  def trans_deposit(user, hold_uuid, amount, currency, registry) do
+    case ExBanking.UserRegistry.get_processes(user, registry) do
+      {:ok, {user_holder, task_supervisor}} ->
+        run_task(
+          :trans_deposit_worker,
+          [user_holder, hold_uuid, amount, currency],
+          task_supervisor
+        )
+
+      error ->
+        error
+    end
+  end
+
   def get_balance_worker(user_holder, currency) do
     ExBanking.UserHolder.get_balance(user_holder, currency)
   end
@@ -39,6 +74,37 @@ defmodule ExBanking.Tasks do
 
   def withdraw_worker(user_holder, amount, currency) do
     ExBanking.UserHolder.withdraw(user_holder, amount, currency)
+  end
+
+  def send_worker(user_holder, to_user, amount, currency, registry) do
+    case ExBanking.UserHolder.hold(user_holder, to_user, amount, currency) do
+      {:error, descr} ->
+        {:error, descr}
+
+      {:ok, hold_uuid} ->
+        send_worker_2_step(user_holder, hold_uuid, to_user, amount, currency, registry)
+    end
+  end
+
+  defp send_worker_2_step(user_holder, hold_uuid, to_user, amount, currency, registry) do
+    case trans_deposit(to_user, hold_uuid, amount, currency, registry) do
+      {:ok, to_user_balance} ->
+        {:ok, from_user_balance} = ExBanking.UserHolder.clear(user_holder, hold_uuid)
+        {:ok, from_user_balance, to_user_balance}
+
+      {:error, err} ->
+        {:ok, _b} = ExBanking.UserHolder.unhold(user_holder, hold_uuid)
+
+        case err do
+          :user_does_not_exist -> {:error, :receiver_does_not_exist}
+          :too_many_requests_to_user -> {:error, :too_many_requests_to_receiver}
+          _ -> {:error, err}
+        end
+    end
+  end
+
+  def trans_deposit_worker(user_holder, hold_uuid, amount, currency) do
+    ExBanking.UserHolder.trans_deposit(user_holder, hold_uuid, amount, currency)
   end
 
   defp run_task(func, args, supervisor) do

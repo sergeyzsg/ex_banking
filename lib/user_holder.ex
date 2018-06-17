@@ -11,7 +11,7 @@ defmodule ExBanking.UserHolder do
   end
 
   def get_balance(user_holder, currency) do
-    GenServer.call(user_holder, {:get_balance_call, currency})
+    GenServer.call(user_holder, {:get_balance, currency})
   end
 
   def deposit(user_holder, amount, currency) do
@@ -51,7 +51,7 @@ defmodule ExBanking.UserHolder do
     end
   end
 
-  defp handle_call_real({:get_balance_call, currency}, _from, user) do
+  defp handle_call_real({:get_balance, currency}, _from, user) do
     {:reply, {:ok, Map.get(user.balance, currency, 0.0)}, user}
   end
 
@@ -115,14 +115,6 @@ defmodule ExBanking.UserHolder do
 
   defp handle_call_real(:get, _from, user) do
     {:reply, user, user}
-  end
-
-  defp handle_call_real(:make_busy, _from, user) do
-    {:reply, :ok, %{user | task_count: user.task_count + 10}}
-  end
-
-  defp handle_call_real(:make_free, _from, user) do
-    {:reply, :ok, %{user | task_count: user.task_count - 10}}
   end
 
   @impl true

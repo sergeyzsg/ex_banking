@@ -119,7 +119,9 @@ defmodule ExBanking.Tasks do
     end
   end
 
-  def make_busy(user, registry, number \\ 10) do
+  def make_busy(user, opts \\ []) do
+    registry = Keyword.get(opts, :registry, ExBanking)
+    number = Keyword.get(opts, :number, 10)
     {:ok, supervisor} = ExBanking.UserRegistry.get_user_task_supervisor(user, registry)
     make_busy_r(number, supervisor)
   end
@@ -138,7 +140,8 @@ defmodule ExBanking.Tasks do
     infinity()
   end
 
-  def make_free(user, registry, tasks) do
+  def make_free(user, tasks, opts) do
+    registry = Keyword.get(opts, :registry, ExBanking)
     {:ok, supervisor} = ExBanking.UserRegistry.get_user_task_supervisor(user, registry)
     make_free_r(supervisor, tasks)
   end

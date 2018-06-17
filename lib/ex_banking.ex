@@ -67,16 +67,7 @@ defmodule ExBanking do
 
     case validate_amount(amount) do
       {:error, descr} -> {:error, descr}
-      valid_amount -> ExBanking.Tasks.send(from_user, to_user, amount, currency, registry)
-    end
-  end
-
-  def call_user_server(username, request, opts \\ []) do
-    registry = Keyword.get(opts, :registry, ExBanking)
-
-    case UserRegistry.get_user_holder(username, registry) do
-      {:ok, pid} -> GenServer.call(pid, request)
-      error -> error
+      valid_amount -> ExBanking.Tasks.send(from_user, to_user, valid_amount, currency, registry)
     end
   end
 
@@ -91,7 +82,7 @@ defmodule ExBanking do
   end
 
   defmodule User do
-    defstruct name: nil, balance: %{}, task_count: 0, holds: %{}, trans_hist: []
+    defstruct name: nil, balance: %{}, holds: %{}, trans_hist: []
   end
 
   def get_user(username, opts \\ []) do
@@ -101,17 +92,5 @@ defmodule ExBanking do
       {:ok, pid} -> GenServer.call(pid, :get)
       error -> error
     end
-  end
-
-  def make_busy(username, opts \\ []) do
-    registry = Keyword.get(opts, :registry, ExBanking)
-    {:ok, pid} = UserRegistry.get_user_holder(username, registry)
-    GenServer.call(pid, :make_busy)
-  end
-
-  def make_free(username, opts \\ []) do
-    registry = Keyword.get(opts, :registry, ExBanking)
-    {:ok, pid} = UserRegistry.get_user_holder(username, registry)
-    GenServer.call(pid, :make_free)
   end
 end

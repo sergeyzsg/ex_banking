@@ -29,10 +29,10 @@ defmodule ExBanking do
 
   @spec deposit(user :: String.t(), amount :: number, currency :: String.t()) ::
           {:ok, new_balance :: number} | banking_error
-  def deposit(user, amount, currency) do
+  def deposit(user, amount, currency, opts \\ []) do
     case validate_amount(amount) do
       {:error, descr} -> {:error, descr}
-      valid_amount -> call_user_server(user, {:deposit, [valid_amount, currency]})
+      valid_amount -> call_user_server(user, {:deposit, [valid_amount, currency]}, opts)
     end
   end
 

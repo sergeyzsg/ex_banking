@@ -108,4 +108,20 @@ defmodule ExBankingTest do
     assert ExBanking.get_user("tst_in_tst", opts).name == "tst_in_tst"
     Supervisor.stop(sv)
   end
+
+  test "get balance racing", context do
+    ExBanking.create_user("user", context.opts)
+    assert ExBanking.deposit("user", 5.52, "EUR", context.opts) === {:ok, 5.52}
+    assert ExBanking.get_balance("user", "EUR", context.opts) === {:ok, 5.52}
+
+    tasks = ExBanking.Tasks.make_busy("user", context.opts[:registry])
+
+    assert ExBanking.get_balance("user", "EUR", context.opts) ===
+             {:error, :too_many_requests_to_user}
+
+    ExBanking.create_user("other_user", context.opts)
+    assert ExBanking.get_balance("other_user", "EUR", context.opts) === {:ok, 0.0}
+    ExBanking.Tasks.make_free("user", context.opts[:registry], tasks)
+    assert ExBanking.get_balance("user", "EUR", context.opts) === {:ok, 5.52}
+  end
 end

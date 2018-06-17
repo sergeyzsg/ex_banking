@@ -59,9 +59,9 @@ defmodule ExBankingTest do
     assert ExBanking.deposit("balance_user", 5.52, "EUR") === {:ok, 5.52}
     assert ExBanking.get_balance("balance_user", "EUR") === {:ok, 5.52}
 
-    ExBanking.make_busy("balance_user")
+    tasks = ExBanking.Tasks.make_busy("balance_user", ExBanking)
     assert ExBanking.get_balance("balance_user", "EUR") === {:error, :too_many_requests_to_user}
-    ExBanking.make_free("balance_user")
+    ExBanking.Tasks.make_free("balance_user", ExBanking, tasks)
     assert ExBanking.get_balance("balance_user", "EUR") === {:ok, 5.52}
   end
 

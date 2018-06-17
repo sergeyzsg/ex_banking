@@ -6,7 +6,7 @@ defmodule ExBanking do
   alias ExBanking.UserRegistry, as: UserRegistry
 
   def start(_type, _args) do
-    ExBanking.Supervisor.start_link(name: ExBanking.Supervisor)
+    ExBanking.Supervisor.start_link(registry: ExBanking)
   end
 
   @type banking_error ::
@@ -22,8 +22,9 @@ defmodule ExBanking do
            | :too_many_requests_to_receiver}
 
   @spec create_user(user :: String.t()) :: :ok | banking_error
-  def create_user(user) do
-    UserRegistry.create_user(user)
+  def create_user(user, opts \\ []) do
+    registry = Keyword.get(opts, :registry, ExBanking)
+    UserRegistry.create_user(user, registry)
   end
 
   @spec deposit(user :: String.t(), amount :: number, currency :: String.t()) ::
@@ -70,8 +71,9 @@ defmodule ExBanking do
     end
   end
 
-  def call_user_server(username, request) do
-    case UserRegistry.get_user_worker(username) do
+  def call_user_server(username, request, opts \\ []) do
+    registry = Keyword.get(opts, :registry, ExBanking)
+    case UserRegistry.get_user_worker(username, registry) do
       {:ok, pid} -> GenServer.call(pid, request)
       error -> error
     end
@@ -260,18 +262,23 @@ defmodule ExBanking do
     worker
   end
 
-  def get_user(username) do
-    {:ok, pid} = UserRegistry.get_user_worker(username)
-    GenServer.call(pid, :get)
+  def get_user(username, opts \\ []) do
+    registry = Keyword.get(opts, :registry, ExBanking)
+    case UserRegistry.get_user_worker(username, registry) do
+      {:ok, pid} -> GenServer.call(pid, :get)
+      error -> error
+    end
   end
 
-  def make_busy(username) do
-    {:ok, pid} = UserRegistry.get_user_worker(username)
+  def make_busy(username, opts \\ []) do
+    registry = Keyword.get(opts, :registry, ExBanking)
+    {:ok, pid} = UserRegistry.get_user_worker(username, registry)
     GenServer.call(pid, :make_busy)
   end
 
-  def make_free(username) do
-    {:ok, pid} = UserRegistry.get_user_worker(username)
+  def make_free(username, opts \\ []) do
+    registry = Keyword.get(opts, :registry, ExBanking)
+    {:ok, pid} = UserRegistry.get_user_worker(username, registry)
     GenServer.call(pid, :make_free)
   end
 end

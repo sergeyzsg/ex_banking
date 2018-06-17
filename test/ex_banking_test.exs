@@ -2,10 +2,22 @@ defmodule ExBankingTest do
   use ExUnit.Case
   doctest ExBanking
 
-  test "create get user" do
+  setup context do
+    start_supervised!({ExBanking.Supervisor, [registry: context.test]})
+    context
+  end
+
+  test "create global user" do
     assert ExBanking.create_user("vavah_user") == :ok
     assert ExBanking.create_user("vavah_user") == {:error, :user_already_exists}
     assert ExBanking.get_user("vavah_user").name == "vavah_user"
+  end
+
+  test "create local user", context do
+    assert ExBanking.create_user("local_user", registry: context.test) == :ok
+    assert ExBanking.create_user("local_user", registry: context.test) == {:error, :user_already_exists}
+    assert ExBanking.get_user("local_user", registry: context.test).name == "local_user"
+    assert ExBanking.get_user("local_user") == {:error, :user_does_not_exist}
   end
 
   test "deposit" do
@@ -80,5 +92,20 @@ defmodule ExBankingTest do
 
     ExBanking.make_free("to_user")
     assert ExBanking.send("from_user", "to_user", 2.2, "EUR") === {:ok, 5.34, 5.2}
+  end
+
+  test "other_name" do
+    opts = [registry: :test_registry]
+    {:ok, sv} = ExBanking.Supervisor.start_link(opts)
+    assert ExBanking.create_user("tst_in_tst", opts) == :ok
+    assert ExBanking.get_user("tst_in_tst", opts).name == "tst_in_tst"
+    assert ExBanking.get_user("tst_in_tst") == {:error, :user_does_not_exist}
+    Supervisor.stop(sv)
+
+    {:ok, sv} = ExBanking.Supervisor.start_link(opts)
+    assert ExBanking.get_user("tst_in_tst", opts) == {:error, :user_does_not_exist}
+    assert ExBanking.create_user("tst_in_tst", opts) == :ok
+    assert ExBanking.get_user("tst_in_tst", opts).name == "tst_in_tst"
+    Supervisor.stop(sv)
   end
 end

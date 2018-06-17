@@ -40,10 +40,12 @@ defmodule ExBanking do
 
   @spec withdraw(user :: String.t(), amount :: number, currency :: String.t()) ::
           {:ok, new_balance :: number} | banking_error
-  def withdraw(user, amount, currency) do
+  def withdraw(user, amount, currency, opts \\ []) do
+    registry = Keyword.get(opts, :registry, ExBanking)
+
     case validate_amount(amount) do
       {:error, descr} -> {:error, descr}
-      valid_amount -> call_user_server(user, {:withdraw, [valid_amount, currency]})
+      valid_amount -> ExBanking.Tasks.withdraw(user, valid_amount, currency, registry)
     end
   end
 

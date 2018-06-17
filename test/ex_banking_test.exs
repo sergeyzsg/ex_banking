@@ -43,12 +43,12 @@ defmodule ExBankingTest do
     assert ExBanking.withdraw("withdraw_user", 5.5, "EUR") === {:ok, 4.5}
     assert ExBanking.withdraw("withdraw_user", 5.5, "EUR") === {:error, :not_enough_money}
 
-    ExBanking.make_busy("withdraw_user")
+    tasks = ExBanking.Tasks.make_busy("withdraw_user", ExBanking)
 
     assert ExBanking.withdraw("withdraw_user", 1.0, "EUR") ===
              {:error, :too_many_requests_to_user}
 
-    ExBanking.make_free("withdraw_user")
+    ExBanking.Tasks.make_free("withdraw_user", ExBanking, tasks)
     assert ExBanking.withdraw("withdraw_user", 1.0, "EUR") === {:ok, 3.5}
   end
 

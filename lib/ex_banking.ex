@@ -95,7 +95,11 @@ defmodule ExBanking do
   end
 
   defmodule UserWorker do
-    use GenServer
+    use GenServer, restart: :temporary
+
+    def start_link(user) do
+      GenServer.start_link(__MODULE__, user)
+    end
 
     @impl true
     def init(user) do
@@ -256,12 +260,6 @@ defmodule ExBanking do
   end
 
   # UserWorker
-
-  def create_user_server(user_name) do
-    user = %User{name: user_name}
-    {:ok, worker} = GenServer.start_link(UserWorker, user)
-    worker
-  end
 
   def get_user(username, opts \\ []) do
     registry = Keyword.get(opts, :registry, ExBanking)
